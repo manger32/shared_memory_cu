@@ -1,0 +1,2 @@
+# shared_memory_cu
+Demo_Example_Working_with_shared_memory_on_CUDA
