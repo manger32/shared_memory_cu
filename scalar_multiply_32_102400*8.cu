@@ -32,6 +32,46 @@ __global__ void Multiply(int *A, int *B, int *C){
     C[row] = result;
 }
 
+__global__ void Multiply_smart_string(int *A, int *B, int *C){
+   int col = blockIdx.x*blockDim.x + threadIdx.x;
+   if (col >= M)
+    return;
+   int dev_private = 0;
+   __shared__ int dev_shared;
+   for (int j = 0; j < M/blockDim.x; ++j)
+   {
+     int addition = A[(j*blockDim.x+threadIdx.x)*N+blockIdx.x] * B[j*blockDim.x+threadIdx.x];
+     dev_private += addition;
+   }
+   if (threadIdx.x == 0)
+     dev_shared = 0;
+   __syncthreads();
+   atomicAdd(&dev_shared, dev_private);
+   __syncthreads();
+   if (threadIdx.x == 0)
+     C[blockIdx.x] = dev_shared;
+}
+
+__global__ void Multiply_smart_column(int *A, int *B, int *C){
+   int row = blockIdx.x*blockDim.x + threadIdx.x;
+   if (row >= M)
+    return;
+   int dev_private = 0;
+   __shared__ int dev_shared;
+   if (threadIdx.x == 0)
+     dev_shared = 0;
+   for (int j = 0; j < M/blockDim.x/N; ++j)
+   {
+     int addition = A[blockIdx.x*threadIdx.x*j] * B[j % N];
+     dev_private += addition;
+     //__syncthreads();
+     atomicAdd(&dev_shared, dev_private);
+     //__syncthreads();
+   }
+   if (threadIdx.x == 0)
+     C[blockIdx.x] = dev_shared;
+}
+
 int main(int argc, char **argv)
 {
   srand(time(NULL));
@@ -64,7 +104,7 @@ int main(int argc, char **argv)
   {
       for(j = 0; j < M; ++j)
           res_CPU[i] += A[i + j*N]*b[j];
-      //cout << "Res_CPU[" << i << "] = " << res_CPU[i] << " " << endl;
+      cout << "Res_CPU[" << i << "] = " << res_CPU[i] << " " << endl;
   }
   double elapsedTimeCPU = (double)(clock()-startCPU)/CLOCKS_PER_SEC;
   cout << "CPU product time = " << elapsedTimeCPU*1000 << " ms\n";
@@ -86,7 +126,9 @@ int main(int argc, char **argv)
   //int numBlocks = 1;
   //dim3 threadsPerBlock(N,N);
   cudaEventRecord(startCUDA,0);
-  Multiply<<<(N+511)/512, 512>>>(aA,aB,aRes);
+  //Multiply<<<(N+511)/512, 512>>>(aA,aB,aRes);
+  //Multiply_smart_string<<<N, 512>>>(aA,aB,aRes);
+  Multiply_smart_column<<<N, 256>>>(aA,aB,aRes);
   cudaEventRecord(stopCUDA,0);
   cudaEventSynchronize(stopCUDA);
   CHECK(cudaGetLastError());
@@ -96,9 +138,9 @@ int main(int argc, char **argv)
 
   cout << "CUDA product time = " << elapsedTimeCUDA << " ms\n";
   cout << "CUDA memory throughput = " << 3*N*sizeof(float)/elapsedTimeCUDA/1024/1024/1.024 << " Gb/s\n";
-  /*for (i = 0; i < N; i++) {
+  for (i = 0; i < N; i++) {
     cout << "Res_GPU[" << i << "] = " << res_GPU[i] << " " << endl;
-  }*/
+  }
   for (i = 0; i < N; i++) {
     if (res_CPU[i] != res_GPU[i])
     {
