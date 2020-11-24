@@ -6,7 +6,7 @@
 #include <iostream>
 #define N 16 //shortest dimension of A: 32
 #define M 2*(102400*8) // 1
-
+//Теоретическая оценка производительности параллельного варианта: 4*819200*32/18000,000,000 (1,8e10 = DeviceToDevice*2 to GB)
 using namespace std;
 
 #define CHECK(value) {                                          \
